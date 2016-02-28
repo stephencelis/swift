@@ -2794,6 +2794,7 @@ ParserResult<TypeDecl> Parser::parseDeclTypeAlias(bool WantDefinition,
 /// property or subscript.
 static FuncDecl *createAccessorFunc(SourceLoc DeclLoc, ParameterList *param,
                                     TypeLoc ElementTy,
+                                    GenericParamList *GenericParams,
                                     ParameterList *Indices, SourceLoc StaticLoc,
                                     Parser::ParseDeclOptions Flags,
                                     AccessorKind Kind,
@@ -2917,7 +2918,7 @@ static FuncDecl *createAccessorFunc(SourceLoc DeclLoc, ParameterList *param,
   auto *D = FuncDecl::create(P->Context, StaticLoc, StaticSpellingKind::None,
                              /* FIXME*/DeclLoc, Identifier(),
                              DeclLoc, SourceLoc(), AccessorKeywordLoc,
-                             /*GenericParams=*/nullptr,
+                             GenericParams,
                              Type(), Params, ReturnType, P->CurDeclContext);
 
   // Non-static set/willSet/didSet/materializeForSet/mutableAddress
@@ -3162,7 +3163,9 @@ static void diagnoseRedundantAccessors(Parser &P, SourceLoc loc,
 /// \brief Parse a get-set clause, optionally containing a getter, setter,
 /// willSet, and/or didSet clauses.  'Indices' is a paren or tuple pattern,
 /// specifying the index list for a subscript.
-bool Parser::parseGetSetImpl(ParseDeclOptions Flags, ParameterList *Indices,
+bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
+                             GenericParamList *GenericParams,
+                             ParameterList *Indices,
                              TypeLoc ElementTy, ParsedAccessors &accessors,
                              SourceLoc &LastValidLoc, SourceLoc StaticLoc,
                              SourceLoc VarLBLoc,
@@ -3236,7 +3239,8 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags, ParameterList *Indices,
         = parseOptionalAccessorArgument(Loc, ElementTy, *this, Kind);
 
       // Set up a function declaration.
-      TheDecl = createAccessorFunc(Loc, ValueNameParams, ElementTy, Indices,
+      TheDecl = createAccessorFunc(Loc, ValueNameParams, ElementTy,
+                                   GenericParams, Indices,
                                    StaticLoc, Flags, Kind, addressorKind, this,
                                    AccessorKeywordLoc);
       TheDecl->getAttrs() = Attributes;
@@ -3367,7 +3371,8 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags, ParameterList *Indices,
     }
 
     // Set up a function declaration.
-    TheDecl = createAccessorFunc(Loc, ValueNamePattern, ElementTy, Indices,
+    TheDecl = createAccessorFunc(Loc, ValueNamePattern, ElementTy,
+                                 GenericParams, Indices,
                                  StaticLoc, Flags, Kind, addressorKind, this,
                                  AccessorKeywordLoc);
     TheDecl->getAttrs() = Attributes;
@@ -3414,15 +3419,17 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags, ParameterList *Indices,
   return false;
 }
 
-bool Parser::parseGetSet(ParseDeclOptions Flags, ParameterList *Indices,
+bool Parser::parseGetSet(ParseDeclOptions Flags,
+                         GenericParamList *GenericParams,
+                         ParameterList *Indices,
                          TypeLoc ElementTy, ParsedAccessors &accessors,
                          SourceLoc StaticLoc,
                          SmallVectorImpl<Decl *> &Decls) {
   accessors.LBLoc = consumeToken(tok::l_brace);
   SourceLoc LastValidLoc = accessors.LBLoc;
-  bool Invalid = parseGetSetImpl(Flags, Indices, ElementTy, accessors,
-                                 LastValidLoc, StaticLoc, accessors.LBLoc,
-                                 Decls);
+  bool Invalid = parseGetSetImpl(Flags, GenericParams, Indices, ElementTy,
+                                 accessors, LastValidLoc, StaticLoc,
+                                 accessors.LBLoc, Decls);
 
   // Parse the final '}'.
   if (Invalid)
@@ -3508,7 +3515,8 @@ VarDecl *Parser::parseDeclVarGetSet(Pattern *pattern,
 
   // Parse getter and setter.
   ParsedAccessors accessors;
-  if (parseGetSet(Flags, /*Indices=*/0, TyLoc, accessors, StaticLoc, Decls))
+  if (parseGetSet(Flags, /*GenericParams=*/nullptr, /*Indices=*/0, TyLoc,
+                  accessors, StaticLoc, Decls))
     Invalid = true;
 
   // If we have an invalid case, bail out now.
@@ -3580,7 +3588,9 @@ void Parser::ParsedAccessors::record(Parser &P, AbstractStorageDecl *storage,
   auto createImplicitAccessor =
   [&](AccessorKind kind, AddressorKind addressorKind,
       ParameterList *argList) -> FuncDecl* {
-    auto accessor = createAccessorFunc(SourceLoc(), argList, elementTy, indices,
+    auto accessor = createAccessorFunc(SourceLoc(), argList, elementTy,
+                                       /*GenericParams=*/nullptr,
+                                       indices,
                                        staticLoc, flags, kind, addressorKind,
                                        &P, SourceLoc());
     accessor->setImplicit();
@@ -4878,13 +4888,21 @@ parseDeclProtocol(ParseDeclOptions Flags, DeclAttributes &Attributes) {
 ///   decl-subscript:
 ///     subscript-head get-set
 ///   subscript-head
-///     'subscript' attribute-list parameter-clause '->' type
+///     'subscript' generic-params? attribute-list parameter-clause '->' type
 /// \endverbatim
 ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
                                         DeclAttributes &Attributes,
                                         SmallVectorImpl<Decl *> &Decls) {
   ParserStatus Status;
   SourceLoc SubscriptLoc = consumeToken(tok::kw_subscript);
+
+  // Parse the generic-params, if present.
+  Optional<Scope> GenericsScope;
+  GenericsScope.emplace(this, ScopeKind::Generics);
+  auto GPResult = maybeParseGenericParams();
+  GenericParamList *GenericParams = GPResult.getPtrOrNull();
+  if (GPResult.hasCodeCompletion())
+    return makeParserCodeCompletionStatus();
 
   // parameter-clause
   if (Tok.isNot(tok::l_paren)) {
@@ -4915,7 +4933,8 @@ ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
   // Build an AST for the subscript declaration.
   DeclName name = DeclName(Context, Context.Id_subscript, argumentNames);
   auto *Subscript = new (Context) SubscriptDecl(name,
-                                                SubscriptLoc, Indices.get(),
+                                                SubscriptLoc, GenericParams,
+                                                Indices.get(),
                                                 ArrowLoc, ElementTy.get(),
                                                 CurDeclContext);
   Subscript->getAttrs() = Attributes;
@@ -4936,7 +4955,7 @@ ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
       diagnose(Tok, diag::expected_lbrace_subscript);
     Status.setIsParseError();
   } else {
-    if (parseGetSet(Flags, Indices.get(), ElementTy.get(),
+    if (parseGetSet(Flags, GenericParams, Indices.get(), ElementTy.get(),
                     accessors, /*StaticLoc=*/SourceLoc(), Decls))
       Status.setIsParseError();
   }
@@ -4956,6 +4975,9 @@ ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
     Subscript->setType(ErrorType::get(Context));
     Subscript->setInvalid();
   }
+
+  // Exit the scope introduced for the generic parameters.
+  GenericsScope.reset();
 
   // No need to setLocalDiscriminator because subscripts cannot
   // validly appear outside of type decls.

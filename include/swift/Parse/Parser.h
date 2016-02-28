@@ -769,13 +769,13 @@ public:
                 SmallVectorImpl<Decl *> &decls);
   };
 
-  bool parseGetSetImpl(ParseDeclOptions Flags,
+  bool parseGetSetImpl(ParseDeclOptions Flags, GenericParamList *GenericParams,
                        ParameterList *Indices, TypeLoc ElementTy,
                        ParsedAccessors &accessors,
                        SourceLoc &LastValidLoc,
                        SourceLoc StaticLoc, SourceLoc VarLBLoc,
                        SmallVectorImpl<Decl *> &Decls);
-  bool parseGetSet(ParseDeclOptions Flags,
+  bool parseGetSet(ParseDeclOptions Flags, GenericParamList *GenericParams,
                    ParameterList *Indices, TypeLoc ElementTy,
                    ParsedAccessors &accessors,
                    SourceLoc StaticLoc, SmallVectorImpl<Decl *> &Decls);

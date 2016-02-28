@@ -287,3 +287,9 @@ struct S4 {
     }
   }
 }
+
+struct G1 {
+  subscript<T>(idx: Int) -> T? {
+    return nil
+  }
+}

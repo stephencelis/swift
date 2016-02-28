@@ -3458,6 +3458,14 @@ static bool isIntegralType(Type type) {
   return false;
 }
 
+void SubscriptDecl::setGenericParams(GenericParamList *GP) {
+  // Set the specified generic parameters and context onto this subscript.
+  GenericParams = GP;
+  if (GP)
+    for (auto Param : *GP)
+      Param->setDeclContext(this);
+}
+
 void SubscriptDecl::setIndices(ParameterList *p) {
   Indices = p;
   

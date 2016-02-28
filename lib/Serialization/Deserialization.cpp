@@ -3025,8 +3025,32 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
 
     DeclName name(ctx, ctx.Id_subscript, argNames);
     auto subscript = createDecl<SubscriptDecl>(name, SourceLoc(), nullptr,
-                                               SourceLoc(), TypeLoc(), DC);
+                                               nullptr, SourceLoc(), TypeLoc(),
+                                               DC);
     declOrOffset = subscript;
+
+    // Generic parameters.
+    GenericParamList *genericParams = maybeReadGenericParams(DC,
+                                                             DeclTypeCursor);
+    subscript->setGenericParams(genericParams);
+    // Conjure up a generic signature from the generic parameters and
+    // requirements.
+    if (genericParams) {
+      SmallVector<GenericTypeParamType *, 4> paramTypes;
+      for (auto &genericParam : *genericParams) {
+        paramTypes.push_back(genericParam->getDeclaredType()
+                             ->castTo<GenericTypeParamType>());
+      }
+
+      // Read the generic requirements.
+      SmallVector<Requirement, 4> requirements;
+      readGenericRequirements(requirements);
+
+      if (!paramTypes.empty()) {
+        GenericSignature *sig = GenericSignature::get(paramTypes, requirements);
+        subscript->setGenericSignature(sig);
+      }
+    }
 
     subscript->setIndices(readParameterList());
     subscript->getElementTypeLoc() = TypeLoc::withoutLoc(getType(elemTypeID));

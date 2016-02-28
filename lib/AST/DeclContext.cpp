@@ -192,7 +192,6 @@ GenericParamList *DeclContext::getGenericParamsOfContext() const {
     case DeclContextKind::SerializedLocal:
     case DeclContextKind::Initializer:
     case DeclContextKind::AbstractClosureExpr:
-    case DeclContextKind::SubscriptDecl:
       // Closures and initializers can't themselves be generic, but they
       // can occur in generic contexts.
       continue;
@@ -200,6 +199,13 @@ GenericParamList *DeclContext::getGenericParamsOfContext() const {
     case DeclContextKind::AbstractFunctionDecl: {
       auto *AFD = cast<AbstractFunctionDecl>(dc);
       if (auto GP = AFD->getGenericParams())
+        return GP;
+      continue;
+    }
+
+    case DeclContextKind::SubscriptDecl: {
+      auto *sub = cast<SubscriptDecl>(dc);
+      if (auto GP = sub->getGenericParams())
         return GP;
       continue;
     }
@@ -233,7 +239,6 @@ GenericSignature *DeclContext::getGenericSignatureOfContext() const {
     case DeclContextKind::Initializer:
     case DeclContextKind::SerializedLocal:
     case DeclContextKind::AbstractClosureExpr:
-    case DeclContextKind::SubscriptDecl:
       // Closures and initializers can't themselves be generic, but they
       // can occur in generic contexts.
       continue;
@@ -241,6 +246,13 @@ GenericSignature *DeclContext::getGenericSignatureOfContext() const {
     case DeclContextKind::AbstractFunctionDecl: {
       auto *AFD = cast<AbstractFunctionDecl>(dc);
       if (auto genericSig = AFD->getGenericSignature())
+        return genericSig;
+      continue;
+    }
+
+    case DeclContextKind::SubscriptDecl: {
+      auto *sub = cast<SubscriptDecl>(dc);
+      if (auto genericSig = sub->getGenericSignature())
         return genericSig;
       continue;
     }
@@ -402,12 +414,16 @@ bool DeclContext::isGenericContext() const {
     case DeclContextKind::Initializer:
     case DeclContextKind::AbstractClosureExpr:
     case DeclContextKind::SerializedLocal:
-    case DeclContextKind::SubscriptDecl:
       // Check parent context.
       continue;
 
     case DeclContextKind::AbstractFunctionDecl:
       if (cast<AbstractFunctionDecl>(dc)->getGenericParams())
+        return true;
+      continue;
+
+    case DeclContextKind::SubscriptDecl:
+      if (cast<SubscriptDecl>(dc)->getGenericParams())
         return true;
       continue;
 
@@ -461,6 +477,8 @@ bool DeclContext::isInnermostContextGeneric() const {
   switch (getContextKind()) {
   case DeclContextKind::AbstractFunctionDecl:
     return (cast<AbstractFunctionDecl>(this)->getGenericParams() != nullptr);
+  case DeclContextKind::SubscriptDecl:
+    return (cast<SubscriptDecl>(this)->getGenericParams() != nullptr);
   case DeclContextKind::ExtensionDecl:
     return (cast<ExtensionDecl>(this)->getGenericParams() != nullptr);
   case DeclContextKind::NominalTypeDecl:

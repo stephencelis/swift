@@ -4301,21 +4301,46 @@ enum class ObjCSubscriptKind {
 ///
 class SubscriptDecl : public AbstractStorageDecl, public DeclContext {
   SourceLoc ArrowLoc;
+  GenericParamList *GenericParams;
+  GenericSignature *GenericSig;
   ParameterList *Indices;
   TypeLoc ElementTy;
 
 public:
-  SubscriptDecl(DeclName Name, SourceLoc SubscriptLoc, ParameterList *Indices,
+  SubscriptDecl(DeclName Name, SourceLoc SubscriptLoc,
+                GenericParamList *GenericParams, ParameterList *Indices,
                 SourceLoc ArrowLoc, TypeLoc ElementTy, DeclContext *Parent)
     : AbstractStorageDecl(DeclKind::Subscript, Parent, Name, SubscriptLoc),
       DeclContext(DeclContextKind::SubscriptDecl, Parent),
-      ArrowLoc(ArrowLoc), Indices(nullptr), ElementTy(ElementTy) {
+      ArrowLoc(ArrowLoc), GenericParams(nullptr), GenericSig(nullptr),
+      Indices(nullptr), ElementTy(ElementTy) {
+    setGenericParams(GenericParams);
     setIndices(Indices);
   }
   
   SourceLoc getSubscriptLoc() const { return getNameLoc(); }
   SourceLoc getStartLoc() const { return getSubscriptLoc(); }
   SourceRange getSourceRange() const;
+
+  /// Retrieve the innermost generic parameter list.
+  GenericParamList *getGenericParams() const {
+    return GenericParams;
+  }
+
+  /// \brief Determine whether this is a generic function, which can only be
+  /// used when each of the archetypes is bound to a particular concrete type.
+  bool isGeneric() const { return GenericParams != nullptr; }
+
+  void setGenericParams(GenericParamList *GenericParams);
+
+  void setGenericSignature(GenericSignature *GenericSig) {
+    assert(!this->GenericSig && "already have signature?");
+    this->GenericSig = GenericSig;
+  }
+
+  GenericSignature *getGenericSignature() const {
+    return GenericSig;
+  }
 
   /// \brief Retrieve the indices for this subscript operation.
   ParameterList *getIndices() { return Indices; }

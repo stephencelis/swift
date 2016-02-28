@@ -4008,7 +4008,9 @@ namespace {
       DeclName name(context, context.Id_subscript, { Identifier() });
       auto subscript
         = Impl.createDeclWithClangNode<SubscriptDecl>(getter->getClangNode(),
-                                      name, decl->getLoc(), bodyParams,
+                                      name, decl->getLoc(),
+                                      /*GenericParams*/nullptr,
+                                      bodyParams,
                                       decl->getLoc(),
                                       TypeLoc::withoutLoc(elementTy), dc);
 
