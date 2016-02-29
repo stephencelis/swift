@@ -1932,6 +1932,7 @@ static void checkAccessibility(TypeChecker &TC, const Decl *D) {
 
   case DeclKind::Subscript: {
     auto SD = cast<SubscriptDecl>(D);
+    checkGenericParamAccessibility(TC, SD->getGenericParams(), SD);
 
     Optional<Accessibility> minAccess;
     const TypeRepr *complainRepr = nullptr;
@@ -3350,6 +3351,41 @@ public:
       SD->setType(FunctionType::get(indicesType, SD->getElementType()));
 
       // If we're in a generic context, set the interface type.
+      // If we have generic parameters, check the generic signature now.
+      if (auto gp = SD->getGenericParams()) {
+        // FEEDBACK: Not sure if this is the right place for this.
+        gp->setOuterParameters(dc->getGenericParamsOfContext());
+
+        GenericSignature *parentSig = nullptr;
+        bool invalid = false;
+        TC.validateGenericSignature(gp, SD, parentSig, nullptr, invalid);
+        if (invalid) {
+          markInvalidGenericSignature(SD, TC);
+        } else {
+          // Create a fresh archetype builder.
+          ArchetypeBuilder builder =
+            TC.createArchetypeBuilder(SD->getModuleContext());
+          TC.checkGenericParamList(&builder, gp, parentSig);
+
+          // Infer requirements from parameter patterns.
+          if (auto pattern = SD->getIndices()) {
+            builder.inferRequirements(pattern, gp);
+          }
+
+          // Infer requirements from the result type.
+          if (!SD->getElementTypeLoc().isNull()) {
+            builder.inferRequirements(SD->getElementTypeLoc(), gp);
+          }
+
+          // Revert the types within the signature so it can be type-checked with
+          // archetypes below.
+//          TC.revertGenericFuncSignature(SD);
+
+          // Assign archetypes.
+          finalizeGenericParamList(builder, gp, SD, TC);
+        }
+      }
+
       if (dc->isGenericContext()) {
         auto indicesTy = ArchetypeBuilder::mapTypeOutOfContext(
                            dc, indicesType);

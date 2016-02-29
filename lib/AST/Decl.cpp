@@ -1537,23 +1537,20 @@ OverloadSignature ValueDecl::getOverloadSignature() const {
         signature.UnaryOperator = func->getAttrs().getUnaryOperatorKind();
       }
     }
-  } else if (isa<SubscriptDecl>(this)) {
+  } else if (auto sub = dyn_cast<SubscriptDecl>(this)) {
     signature.InterfaceType
       = getInterfaceType()->getWithoutDefaultArgs(getASTContext())
           ->getCanonicalType();
 
-    // If the subscript occurs within a generic extension context,
-    // consider the generic signature of the extension.
-    if (auto ext = dyn_cast<ExtensionDecl>(getDeclContext())) {
-      if (auto genericSig = ext->getGenericSignature()) {
-        auto funcTy = signature.InterfaceType->castTo<AnyFunctionType>();
-        signature.InterfaceType
-          = GenericFunctionType::get(genericSig,
-                                     funcTy->getInput(),
-                                     funcTy->getResult(),
-                                     funcTy->getExtInfo())
-              ->getCanonicalType();
-      }
+    // If the subscript is generic, use its signature.
+    if (auto genericSig = sub->getGenericSignature()) {
+      auto funcTy = signature.InterfaceType->castTo<AnyFunctionType>();
+      signature.InterfaceType
+        = GenericFunctionType::get(genericSig,
+                                   funcTy->getInput(),
+                                   funcTy->getResult(),
+                                   funcTy->getExtInfo())
+            ->getCanonicalType();
     }
   } else if (isa<VarDecl>(this)) {
     signature.IsProperty = true;

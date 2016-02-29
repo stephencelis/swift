@@ -3515,7 +3515,7 @@ VarDecl *Parser::parseDeclVarGetSet(Pattern *pattern,
 
   // Parse getter and setter.
   ParsedAccessors accessors;
-  if (parseGetSet(Flags, /*GenericParams=*/nullptr, /*Indices=*/0, TyLoc,
+  if (parseGetSet(Flags, /*GenericParams=*/nullptr, /*Indices=*/nullptr, TyLoc,
                   accessors, StaticLoc, Decls))
     Invalid = true;
 
