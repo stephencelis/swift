@@ -1195,6 +1195,8 @@ public:
   /// Diagnose if the class has no designated initializers.
   void maybeDiagnoseClassWithoutInitializers(ClassDecl *classDecl);
 
+  void addImplicitProperties(EnumDecl *enumDecl);
+
   ///
   /// Add any implicitly-defined constructors required for the given
   /// struct or class.

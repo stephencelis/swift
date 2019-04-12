@@ -2532,6 +2532,8 @@ public:
 
     ED->getAllConformances();
 
+    TC.addImplicitProperties(ED);
+
     TC.checkDeclCircularity(ED);
     TC.ConformanceContexts.push_back(ED);
   }
@@ -5030,6 +5032,130 @@ static void diagnoseMissingRequiredInitializer(
 
   TC.diagnose(findNonImplicitRequiredInit(superInitializer),
               diag::required_initializer_here);
+}
+
+void TypeChecker::addImplicitProperties(EnumDecl *decl) {
+  // Don't synthesize properties for enums without associated values.
+  if (decl->hasOnlyCasesWithoutAssociatedValues())
+    return;
+
+  for (auto elt : decl->getAllElements()) {
+    auto &C = Context;
+    auto var = new (C) VarDecl(/*IsStatic*/false, VarDecl::Specifier::Var,
+                               /*IsCaptureList*/false, SourceLoc(),
+                               elt->getName(), decl);
+    var->copyFormalAccessFrom(decl, /*sourceIsParentContext*/ true);
+    var->getAttrs().add(new (C) FinalAttr(/*IsImplicit=*/true));
+    var->setImplicit();
+
+    Type wrappedType;
+    if (auto *PL = elt->getParameterList()) {
+      switch (PL->size()) {
+        case 0:
+          wrappedType = TupleType::getEmpty(C);
+          break;
+        case 1:
+          wrappedType = TupleType::getEmpty(C);
+          // TODO
+//          interfaceType = elt->getParameterList()->get(0)->getInterfaceType();
+          break;
+        default:
+          // TODO
+          break;
+      }
+    } else {
+      wrappedType = TupleType::getEmpty(C);
+    }
+    auto interfaceType = OptionalType::get(wrappedType);
+    var->setInterfaceType(interfaceType);
+
+    var->setValidationToChecked();
+
+    auto *params = ParameterList::createEmpty(C);
+
+    auto getter = AccessorDecl::create(C,
+                                       /*FuncLoc=*/SourceLoc(),
+                                       /*AccessorKeywordLoc=*/SourceLoc(),
+                                       AccessorKind::Get,
+                                       var,
+                                       /*StaticLoc=*/SourceLoc(),
+                                       StaticSpellingKind::None,
+                                       /*Throws=*/false,
+                                       /*ThrowsLoc=*/SourceLoc(),
+                                       /*GenericParams=*/nullptr, params,
+                                       TypeLoc::withoutLoc(interfaceType),
+                                       decl);
+    getter->getAttrs().add(new (C) FinalAttr(/*IsImplicit=*/true));
+    getter->setAccess(var->getFormalAccess());
+    getter->setImplicit();
+    getter->setIsObjC(false);
+    getter->setIsDynamic(false);
+
+    getter->computeType();
+    getter->setValidationToChecked();
+
+    var->setAccessors(StorageImplInfo::getImmutableComputed(),
+                      SourceLoc(), {getter}, SourceLoc());
+
+    auto *selfDecl = getter->getImplicitSelfDecl();
+    auto selfRef = new (C) DeclRefExpr(selfDecl, DeclNameLoc(), /*implicit*/true);
+    selfRef->setType(selfDecl->getType());
+
+    SmallVector<StmtConditionElement, 1> conditions;
+    SmallVector<ASTNode, 1> guardStatements;
+    // First, generate the statement for the body of the guard.
+    // return nil
+    auto nilExpr = new (C) NilLiteralExpr(SourceLoc(), /*Implicit*/true);
+    nilExpr->setType(interfaceType);
+    auto returnNilStmt = new (C) ReturnStmt(SourceLoc(), nilExpr);
+    guardStatements.emplace_back(ASTNode(returnNilStmt));
+
+    // Next, generate the condition being checked.
+    // case .name = self
+    Pattern *pattern = new (C) EnumElementPattern(SourceLoc(), SourceLoc(),
+                                                  elt->getName(), nullptr,
+                                                  selfRef);
+    auto cond = StmtConditionElement(SourceLoc(), pattern, selfRef);
+    conditions.emplace_back(cond);
+
+    auto guardBody = BraceStmt::create(C, SourceLoc(), guardStatements,
+                                       SourceLoc());
+    auto guard = new (C) GuardStmt(SourceLoc(), C.AllocateCopy(conditions),
+                                   guardBody);
+
+    SmallVector<ASTNode, 2> statements;
+    statements.emplace_back(guard);
+
+    Expr *voidExpr = TupleExpr::createEmpty(C, /*LParenLoc*/SourceLoc(),
+                                            /*RParenLoc*/SourceLoc(),
+                                            /*implicit*/true);
+    auto optVoidExpr = new (C) InjectIntoOptionalExpr(voidExpr,
+                                                      TupleType::getEmpty(C));
+    optVoidExpr->setType(interfaceType);
+    auto returnStmt = new (C) ReturnStmt(SourceLoc(), optVoidExpr);
+    statements.push_back(returnStmt);
+
+    auto body = BraceStmt::create(C, SourceLoc(), statements, SourceLoc(),
+                                  /*implicit*/true);
+
+    getter->setBody(body);
+    getter->setBodyTypeCheckedIfPresent();
+
+    Type ty = var->getType();
+    Pattern *P = new (C) NamedPattern(var);
+    P->setType(ty);
+    P->setImplicit();
+    auto *computedPattern = TypedPattern::createImplicit(C, P, ty);
+    auto *binding = PatternBindingDecl::createImplicit(C,
+                                                       StaticSpellingKind::None,
+                                                       computedPattern,
+                                                       /*InitExpr*/nullptr,
+                                                       decl);
+
+    decl->addMember(binding);
+    decl->addMember(var);
+    decl->addMember(getter);
+  }
 }
 
 void TypeChecker::addImplicitConstructors(NominalTypeDecl *decl) {
