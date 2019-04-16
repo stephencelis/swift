@@ -2845,6 +2845,11 @@ static bool isCurrentFunctionReadAccess(SILGenFunction &SGF) {
 LValue SILGenLValue::visitMemberRefExpr(MemberRefExpr *e,
                                         SGFAccessKind accessKind,
                                         LValueOptions options) {
+  if (auto elt = dyn_cast<EnumElementDecl>(e->getMember().getDecl())) {
+    auto enumDecl = elt->getParentEnum();
+    // TODO
+  }
+
   // MemberRefExpr can refer to type and function members, but the only case
   // that can be an lvalue is a VarDecl.
   VarDecl *var = cast<VarDecl>(e->getMember().getDecl());
