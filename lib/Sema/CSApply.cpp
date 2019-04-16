@@ -1029,6 +1029,24 @@ namespace {
         // FIXME: Provide type annotation.
         ref = forceUnwrapIfExpected(ref, choice, memberLocator);
         apply = new (context) ConstructorRefCallExpr(ref, base);
+      } else if (baseIsInstance && isa<EnumElementDecl>(member)) {
+        auto elt = cast<EnumElementDecl>(member);
+        Type retTy;
+        if (!elt->hasAssociatedValues() ||
+            elt->getParameterList()->size() == 0) {
+          retTy = OptionalType::get(TupleType::getEmpty(context));
+        } else if (elt->getParameterList()->size() == 1) {
+          retTy = OptionalType::get(elt->getParameterList()->get(0)->getType());
+        } else {
+          // TODO
+        }
+        auto memberRefExpr
+          = new (context) MemberRefExpr(base, dotLoc, memberRef,
+                                        memberLoc, Implicit, semantics);
+        cs.setType(memberRefExpr, retTy);
+        Expr *result = memberRefExpr;
+        closeExistential(result, locator);
+        return forceUnwrapIfExpected(result, choice, memberLocator);
       } else if (!baseIsInstance && member->isInstanceMember()) {
         // Reference to an unbound instance method.
         Expr *result = new (context) DotSyntaxBaseIgnoredExpr(base, dotLoc,
@@ -6740,6 +6758,9 @@ static Type adjustSelfTypeForMember(Type baseTy, ValueDecl *member,
   auto baseObjectTy = baseTy->getWithoutSpecifierType();
 
   if (isa<ConstructorDecl>(member))
+    return baseObjectTy;
+
+  if (isa<EnumElementDecl>(member))
     return baseObjectTy;
 
   if (auto func = dyn_cast<FuncDecl>(member)) {

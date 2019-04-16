@@ -3837,12 +3837,13 @@ performMemberLookup(ConstraintKind constraintKind, DeclName memberName,
 
       /* We're OK */
 
-    } else {
-      if (!hasStaticMembers) {
-        result.addUnviable(candidate,
-                           MemberLookupResult::UR_TypeMemberOnInstance);
-        return;
-      }
+    } else if (!hasStaticMembers && (!isa<EnumElementDecl>(decl) ||
+                                     cast<EnumElementDecl>(decl)
+                                     ->getParentEnum()
+                                     ->hasOnlyCasesWithoutAssociatedValues())) {
+      result.addUnviable(candidate,
+                         MemberLookupResult::UR_TypeMemberOnInstance);
+      return;
     }
 
     // If we have an rvalue base, make sure that the result isn't 'mutating'

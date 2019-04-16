@@ -1935,8 +1935,12 @@ bool AllowTypeOrInstanceMemberFailure::diagnoseAsError() {
     }
     
     if (isa<EnumElementDecl>(member)) {
-      Diag.emplace(emitDiagnostic(loc, diag::could_not_use_enum_element_on_instance,
-                                  Name));
+      auto elt = cast<EnumElementDecl>(member);
+      if (elt->getParentEnum()->hasOnlyCasesWithoutAssociatedValues()) {
+        Diag.emplace(emitDiagnostic(loc,
+                                    diag::could_not_use_enum_element_on_instance,
+                                    Name));
+      }
     }
     else {
       Diag.emplace(emitDiagnostic(loc, diag::could_not_use_type_member_on_instance,
