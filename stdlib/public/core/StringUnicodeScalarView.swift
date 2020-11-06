@@ -70,6 +70,9 @@ extension String {
       self._guts = _guts
       _invariantCheck()
     }
+    
+    @_alwaysEmitIntoClient
+    public var base: String { String(self._guts) }
   }
 }
 
